@@ -18,6 +18,9 @@ class Config:
     GEMINI_POST_MODEL = os.getenv("GEMINI_POST_MODEL", "gemini-3.5-flash")
     GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "imagen-3.0-generate-002")
     
+    # Pixabay API 설정
+    PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
+    
     # Google API 설정
     GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID")
     BLOG_ID = os.getenv("BLOG_ID")
@@ -52,6 +55,12 @@ class Config:
         if missing:
             logger.error(f"Missing required environment variables: {', '.join(missing)}")
             return False
+            
+        if not cls.PIXABAY_API_KEY:
+            logger.warning("PIXABAY_API_KEY environment variable is not set. The bot will run in 'Text-Only Fallback Mode' (no images will be published).")
+        else:
+            logger.info("PIXABAY_API_KEY is configured. Rich Media Mode (Pixabay) is active!")
+            
         return True
 
     @classmethod

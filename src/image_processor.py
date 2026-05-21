@@ -84,8 +84,11 @@ class ImageProcessor:
         
         for idx, prompt in enumerate(prompts):
             try:
-                # 1. Imagen 3 이미지 생성
+                # 1. Pixabay 이미지 다운로드
                 raw_bytes = gemini_client.generate_image_by_prompt(prompt)
+                if not raw_bytes:
+                    logger.warning(f"Skipping image #{idx+1} for keyword '{prompt}' (no image bytes returned).")
+                    continue
                 
                 # 2. WebP 변환 및 용량 최적화 (품질 82%)
                 webp_bytes = self.convert_to_webp(raw_bytes, quality=82)

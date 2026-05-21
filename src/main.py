@@ -79,7 +79,8 @@ def run_pipeline():
             Config.GEMINI_API_KEY,
             topic_model=Config.GEMINI_TOPIC_MODEL,
             post_model=Config.GEMINI_POST_MODEL,
-            image_model=Config.GEMINI_IMAGE_MODEL
+            image_model=Config.GEMINI_IMAGE_MODEL,
+            pixabay_api_key=Config.PIXABAY_API_KEY
         )
         
         # 주제 도출 단계 (지수 백오프 적용)

@@ -8,13 +8,14 @@ from google.genai.errors import APIError
 logger = logging.getLogger("ScienceBlogBot.GeminiClient")
 
 class GeminiClient:
-    def __init__(self, api_key: str, topic_model: str = "gemini-2.5-flash", post_model: str = "gemini-3.5-flash", image_model: str = "imagen-3.0-generate-002"):
+    def __init__(self, api_key: str, topic_model: str = "gemini-2.5-flash", post_model: str = "gemini-3.5-flash", image_model: str = "imagen-3.0-generate-002", pixabay_api_key: str = None):
         # 최신 google-genai SDK 클라이언트 초기화
         self.client = genai.Client(api_key=api_key)
         # 이미지 생성이나 일반 텍스트용 기본 모델 지정
         self.text_model = topic_model  # Grounding 및 텍스트 처리에 적합한 모델 (주제 선정용)
         self.post_model = post_model  # 블로그 본문 글작성용 모델
         self.image_model = image_model  # 최신 고화질 무료 이미지 모델
+        self.pixabay_api_key = pixabay_api_key
 
     def select_topic(self, system_prompt: str, published_topics: list[str]) -> dict:
         """
@@ -44,11 +45,11 @@ class GeminiClient:
 2. [검색량 증가율 존재]: 구글 실시간 트렌드 및 대중 검색 흐름상 최근 검색량 그래프가 크게 상승하고 있는 키워드.
 3. [48시간 내 급상승]: 최근 48시간 이내에 새롭게 관찰되었거나 해외/국내 뉴스를 통해 재조명받기 시작한 현상, 이론 또는 이슈.
 4. [과학적 설명 가능]: 현상 이면에 물리(역학, 열역학, 양자 등), 화학, 생물학 등 명확하고 심도 깊은 '일상 속 과학 원리'가 존재할 것.
-5. [이미지화 가능]: 원리를 직관적인 모형, 도표(예: 빛의 굴절, 분자 구조, 세포 반응)로 명확히 시각화하여 영어 프롬프트로 묘사할 수 있는 주제.
+5. [이미지화 가능]: 원리를 직관적인 모형, 도표, 실물 이미지로 시각화하기 쉬운 주제이며, 무료 이미지 플랫폼(Pixabay)에서 검색해낼 수 있는 1~3단어 수준의 명확한 영어 키워드(예: 'quantum computer', 'microscope cells', 'solar eclipse')를 뽑을 수 있을 것.
 6. [일반인 공감 가능]: 대중이 삶의 현장에서 직접 체감하고 흥미를 느낄 만한 주제.
 7. [광고 친화적]: 폭력성, 선정성, 정치/종교 분쟁, 질병 공포 등을 완전히 배제할 것.
 
-구글 검색 툴을 사용해 최신 자료를 충분히 검색한 뒤, 7대 정책을 어떻게 모두 만족했는지 기술하고, 최종 선정된 '주제 제목', '키워드 태그(3~5개)', '본문에 들어갈 이미지 생성용 영어 묘사 2가지'를 자유롭고 상세하게 텍스트로 기술해 주십시오.
+구글 검색 툴을 사용해 최신 자료를 충분히 검색한 뒤, 7대 정책을 어떻게 모두 만족했는지 기술하고, 최종 선정된 '주제 제목', '키워드 태그(3~5개)', '본문 이미지 검색용 영어 키워드 2가지(각각 1~3단어 수준의 아주 구체적이고 대중적인 단어 조합)'를 자유롭고 상세하게 텍스트로 기술해 주십시오.
 """
         try:
             # 1단계: 구글 검색을 사용해 자유롭게 트렌드 분석 및 기획안 도출 (response_mime_type을 지정하지 않아 400 에러 우회)
@@ -107,11 +108,11 @@ class GeminiClient:
     def generate_blog_post(self, system_prompt: str, topic_plan: dict) -> str:
         """
         선정된 주제를 기반으로 풍부한 지식을 담은 프리미엄 HTML 본문을 작성합니다.
-        중간에 이미지 생성 태그 [IMAGE_PROMPT: 영어 묘사] 2개가 적재적소에 위치하도록 합니다.
+        중간에 이미지 생성 태그 [IMAGE_PROMPT: 영어 키워드] 2개가 적재적소에 위치하도록 합니다.
         """
         title = topic_plan.get("title")
-        img_prompt1 = topic_plan.get("image_prompt_1")
-        img_prompt2 = topic_plan.get("image_prompt_2")
+        img_prompt1 = topic_plan.get("image_keyword_1") or topic_plan.get("image_prompt_1")
+        img_prompt2 = topic_plan.get("image_keyword_2") or topic_plan.get("image_prompt_2")
         
         logger.info(f"Generating HTML blog post body for topic: '{title}'...")
         
@@ -120,8 +121,8 @@ class GeminiClient:
 
 [기획안]
 - 제목: {title}
-- 이미지 1 묘사: {img_prompt1}
-- 이미지 2 묘사: {img_prompt2}
+- 이미지 1 검색 키워드: {img_prompt1}
+- 이미지 2 검색 키워드: {img_prompt2}
 
 [작성 및 서식 요구사항 (Strict Style Policy)]
 1. **HTML 형식 작성**: Blogger 본문에 바로 삽입될 것이므로 마크다운이 아닌 **순수 HTML 태그**로 작성하십시오.
@@ -168,28 +169,77 @@ HTML 포스트 본문만 즉시 반환하십시오. 앞뒤의 ```html 이나 여
 
     def generate_image_by_prompt(self, english_prompt: str) -> bytes:
         """
-        Imagen 3 API를 호출하여 고해상도 과학 도표/삽화 이미지를 바이너리로 생성해 옵니다.
+        Pixabay 무료 이미지 API를 호출하여 입력받은 영어 키워드에 해당하는 고해상도 이미지를 바이너리로 내려받습니다.
         """
-        logger.info(f"Generating image via Imagen 3. Prompt: '{english_prompt[:60]}...'")
-        try:
-            result = self.client.models.generate_images(
-                model=self.image_model,
-                prompt=english_prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    output_mime_type="image/jpeg",
-                    aspect_ratio="16:9"  # 가로형 블로그 이미지 최적 비율
-                )
-            )
-            
-            if not result.generated_images:
-                raise APIError("No images returned from Imagen 3 API.")
+        import requests
+        
+        # 키워드 정리: [IMAGE_PROMPT: ...] 형식에서 추출된 프롬프트가 다소 길 경우, 쉼표나 띄어쓰기로 앞 단어 일부만 추출하거나 전체 검색 시도
+        # Pixabay API는 단어 수가 너무 많고 복잡하면 결과가 안 나올 수 있으므로, 적절히 앞 3~4단어만 잘라서 사용하거나 단어 분리
+        search_query = english_prompt.strip()
+        
+        # 혹시나 예전 스타일의 너무 긴 프롬프트가 들어올 것에 대비해 5단어 이하로 제한
+        words = search_query.split()
+        if len(words) > 5:
+            # 쉼표가 있다면 첫 절을 선택, 없으면 앞 4단어 선택
+            if "," in search_query:
+                search_query = search_query.split(",")[0].strip()
+            else:
+                search_query = " ".join(words[:4])
                 
-            # 첫 번째 이미지의 바이트 추출
-            image_bytes = result.generated_images[0].image.image_bytes
-            logger.info(f"Successfully generated image. Size: {len(image_bytes)} bytes.")
-            return image_bytes
+        logger.info(f"Searching Pixabay for keyword: '{search_query}' (Original: '{english_prompt[:40]}...')")
+        
+        if not self.pixabay_api_key:
+            logger.warning("Pixabay API Key is missing. Skipping image download (will fall back to text-only mode).")
+            return None
             
+        try:
+            # Pixabay API 호출 파라미터 세팅
+            params = {
+                "key": self.pixabay_api_key,
+                "q": search_query,
+                "image_type": "photo",
+                "safesearch": "true",
+                "per_page": 5,
+                "orientation": "horizontal"
+            }
+            
+            response = requests.get("https://pixabay.com/api/", params=params, timeout=10)
+            if response.status_code != 200:
+                logger.error(f"Pixabay API returned non-200 status: {response.status_code}, response: {response.text}")
+                return None
+                
+            data = response.json()
+            hits = data.get("hits", [])
+            
+            if not hits:
+                # 결과가 전혀 없는 경우, 조금 더 광범위하게 검색해보기 위해 단어 하나로 축소하여 재시도
+                fallback_query = words[0] if words else "science"
+                logger.warning(f"No results for '{search_query}'. Trying fallback search with '{fallback_query}'...")
+                params["q"] = fallback_query
+                response = requests.get("https://pixabay.com/api/", params=params, timeout=10)
+                if response.status_code == 200:
+                    hits = response.json().get("hits", [])
+            
+            if not hits:
+                logger.warning(f"No images found on Pixabay for query and fallback.")
+                return None
+                
+            # 가장 해상도가 높고 적합한 이미지 URL 선택 (largeImageURL 또는 webformatURL)
+            image_url = hits[0].get("largeImageURL") or hits[0].get("webformatURL")
+            if not image_url:
+                logger.warning("No valid image URL found in Pixabay response hits.")
+                return None
+                
+            logger.info(f"Downloading selected image from Pixabay: {image_url}")
+            
+            img_response = requests.get(image_url, timeout=15)
+            if img_response.status_code == 200:
+                logger.info(f"Successfully downloaded Pixabay image. Size: {len(img_response.content)} bytes.")
+                return img_response.content
+            else:
+                logger.error(f"Failed to download image bytes. Status: {img_response.status_code}")
+                return None
+                
         except Exception as e:
-            logger.error(f"Error generating image from Google AI Studio: {e}")
-            raise
+            logger.error(f"Error occurred during Pixabay image search/download: {e}")
+            return None

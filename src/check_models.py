@@ -79,6 +79,40 @@ def main():
         logger.error("No image generation models succeeded with your API key.")
         logger.error("If you are on the free tier, please check Google AI Studio to verify if Imagen 3 API is allowed for your account type/region.")
     logger.info("=" * 60)
+    
+    logger.info("\n" + "=" * 60)
+    logger.info("TESTING PIXABAY STOCK PHOTO API:")
+    logger.info("=" * 60)
+    
+    pixabay_key = os.getenv("PIXABAY_API_KEY")
+    if not pixabay_key:
+        logger.warning("⚠️ PIXABAY_API_KEY is not set in environment.")
+        logger.warning("The bot will default to 'Text-Only Fallback Mode' (no images).")
+    else:
+        logger.info(f"Detected PIXABAY_API_KEY. Verifying query: 'quantum physics'...")
+        import requests
+        try:
+            params = {
+                "key": pixabay_key,
+                "q": "quantum physics",
+                "image_type": "photo",
+                "safesearch": "true",
+                "per_page": 3
+            }
+            res = requests.get("https://pixabay.com/api/", params=params, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                hits = data.get("hits", [])
+                if hits:
+                    logger.info(f"🎉 PIXABAY SUCCESS! Found {len(hits)} matching stock photos.")
+                    logger.info(f"Top image URL: {hits[0].get('largeImageURL') or hits[0].get('webformatURL')}")
+                else:
+                    logger.warning("⚠️ Pixabay query succeeded but returned 0 results.")
+            else:
+                logger.error(f"❌ Pixabay API verification failed. HTTP {res.status_code}: {res.text}")
+        except Exception as e:
+            logger.error(f"❌ Pixabay API connection failed: {e}")
+    logger.info("=" * 60)
 
 if __name__ == "__main__":
     main()

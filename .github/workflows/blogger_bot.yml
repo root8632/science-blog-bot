@@ -39,6 +39,9 @@ jobs:
           # Gemini API Credentials
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           
+          # Pixabay API Credentials (Optional)
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          
           # Google Sheets API & DB Settings
           GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
           
