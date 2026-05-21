@@ -123,7 +123,7 @@ def run_pipeline():
     try:
         # 이미지 생성을 안전하게 감싸서 호출할 수 있도록 람다 정의
         def process_images_safe():
-            return image_processor.process_and_replace_tags(raw_html_content, gemini_client)
+            return image_processor.process_and_replace_tags(raw_html_content, gemini_client, topic_plan)
             
         content_with_tags, processed_images = retry_with_backoff(
             process_images_safe,

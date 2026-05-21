@@ -71,7 +71,7 @@ class ImageProcessor:
         logger.info(f"Saved WebP image to: {full_path}")
         return full_path
 
-    def process_and_replace_tags(self, content: str, gemini_client) -> tuple[str, list[dict]]:
+    def process_and_replace_tags(self, content: str, gemini_client, topic_plan: dict = None) -> tuple[str, list[dict]]:
         """
         본문 내 모든 이미지 태그를 찾아 이미지를 생성하고, WebP 변환 및 저장을 거친 후 
         임시 해시 매핑 메타데이터 리스트를 작성하여 반환합니다.
@@ -105,9 +105,21 @@ class ImageProcessor:
                 # 슬래시 경로 정규화 (윈도우 환경 대응 및 URL 포맷 호환을 위해 슬래시 '/'로 통일)
                 url_friendly_rel_path = rel_path.replace("\\", "/")
                 
+                # 순서에 따라 topic_plan에서 미리 준비된 한글 캡션 가져오기
+                caption = None
+                if topic_plan:
+                    if idx == 0:
+                        caption = topic_plan.get("image_caption_1")
+                    elif idx == 1:
+                        caption = topic_plan.get("image_caption_2")
+                
+                if not caption:
+                    caption = prompt
+                
                 processed_images.append({
                     "tag": tag_to_replace,
                     "prompt": prompt,
+                    "caption": caption,
                     "rel_path": url_friendly_rel_path,
                     "full_path": full_path,
                     "hash": img_hash

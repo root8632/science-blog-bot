@@ -26,10 +26,12 @@ class BloggerClient:
             cdn_url = git_manager.get_public_cdn_url(rel_path)
             
             # 국문용 짧은 설명 또는 영어 프롬프트의 에센스 추출 (캡션용)
-            # 영어 프롬프트가 너무 길 수 있으므로 핵심 앞 40자만 캡션으로 처리
-            caption = prompt.split(",")[0] if "," in prompt else prompt
-            if len(caption) > 50:
-                caption = caption[:47] + "..."
+            caption = img.get("caption") or prompt
+            if not img.get("caption"):
+                # 영어 프롬프트가 너무 길 수 있으므로 핵심 앞 40자만 캡션으로 처리 (역호환성)
+                caption = prompt.split(",")[0] if "," in prompt else prompt
+                if len(caption) > 50:
+                    caption = caption[:47] + "..."
                 
             # HTML 특수기호 에스케이프 처리
             caption_esc = html.escape(caption)

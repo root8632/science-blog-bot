@@ -82,8 +82,10 @@ class GeminiClient:
   "title": "선정된 매력적인 포스팅 국문 제목 (예: '왜 비누방울은 햇빛 아래서 무지갯빛으로 빛날까?')",
   "keywords": ["주요", "검색", "태그", "3~5개"],
   "rationale": "7대 정책을 어떻게 충족했는지 상세한 설명",
-  "image_prompt_1": "본문 전반부에 삽입될, 과학 원리를 묘사하는 고품질 영문 이미지 생성 프롬프트 (Imagen 3 전용, 구체적인 스타일과 광원 묘사 포함)",
-  "image_prompt_2": "본문 후반부나 결론부에 삽입될, 과학 현상의 응용이나 대중적 직관을 돕는 또 다른 고품질 영문 이미지 생성 프롬프트"
+  "image_keyword_1": "본문 전반부에 삽입될 이미지 검색을 위한 1~3단어 수준의 명확하고 단순한 영문 키워드 (예: 'lactobacillus', 'bubble')",
+  "image_caption_1": "본문 전반부 이미지 하단에 노출할 친절하고 세련된 한글 설명 캡션 (예: '현미경으로 관찰한 김치 속 유산균의 모습')",
+  "image_keyword_2": "본문 후반부에 삽입될 이미지 검색을 위한 1~3단어 수준의 명확하고 단순한 영문 키워드 (예: 'probiotics', 'microscope')",
+  "image_caption_2": "본문 후반부 이미지 하단에 노출할 친절하고 세련된 한글 설명 캡션"
 }}
 """
             json_response = self.client.models.generate_content(
