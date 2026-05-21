@@ -117,6 +117,7 @@ class GeminiClient:
         img_prompt2 = topic_plan.get("image_keyword_2") or topic_plan.get("image_prompt_2")
         
         logger.info(f"Generating HTML blog post body for topic: '{title}'...")
+        logger.info(f"System Instruction Loaded (Length: {len(system_prompt)} chars). Preview: '{system_prompt[:120].strip()}...'")
         
         # 기본 안전 fallback 스타일 가이드
         default_style_guide = (
@@ -143,8 +144,8 @@ class GeminiClient:
             
             if missing_tokens:
                 logger.warning(
-                    f"⚠️ Google Sheets Style Guide is missing mandatory placeholders {missing_tokens}. "
-                    f"Falling back to built-in safe default style guide to prevent parsing crashes."
+                    f"⚠️ [STYLE GUIDE VALIDATION FAILED] Google Sheets template is missing mandatory placeholders {missing_tokens}. "
+                    f"Falling back to built-in safe default style guide."
                 )
                 style_guide = default_style_guide.format(
                     title=title,
@@ -159,16 +160,17 @@ class GeminiClient:
                         img_prompt1=img_prompt1,
                         img_prompt2=img_prompt2
                     )
-                    logger.info("Successfully formatted Style Guide template loaded from Google Sheets.")
+                    logger.info("✅ [STYLE GUIDE VALIDATION SUCCESS] Safely loaded and parsed custom Style Guide from Google Sheets.")
+                    logger.info(f"Style Guide Preview: '{style_guide[:150].strip()}...'")
                 except Exception as e:
-                    logger.error(f"Failed to format style guide template: {e}. Falling back to default.")
+                    logger.error(f"❌ Failed to format style guide template: {e}. Falling back to default.")
                     style_guide = default_style_guide.format(
                         title=title,
                         img_prompt1=img_prompt1,
                         img_prompt2=img_prompt2
                     )
         else:
-            logger.info("No Style Guide template provided from sheet. Using default style guide.")
+            logger.info("ℹ️ No Style Guide template provided in sheet cells. Using built-in default style guide.")
             style_guide = default_style_guide.format(
                 title=title,
                 img_prompt1=img_prompt1,
