@@ -1,0 +1,170 @@
+import json
+import logging
+import re
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
+
+logger = logging.getLogger("ScienceBlogBot.GeminiClient")
+
+class GeminiClient:
+    def __init__(self, api_key: str):
+        # 최신 google-genai SDK 클라이언트 초기화
+        self.client = genai.Client(api_key=api_key)
+        # 이미지 생성이나 일반 텍스트용 기본 모델 지정
+        self.text_model = "gemini-2.5-flash"  # Grounding 및 텍스트 처리에 적합한 모델
+        self.image_model = "imagen-3.0-generate-002"  # 최신 고화질 무료 이미지 모델
+
+    def select_topic(self, system_prompt: str, published_topics: list[str]) -> dict:
+        """
+        7대 주제 선정 정책(Strict Topic Policy)을 준수하는 과학 블로그 주제를 실시간 검색으로 도출합니다.
+        중복 방지를 위해 기존 발행 주제 목록을 제외시킵니다.
+        """
+        logger.info("Starting real-time topic research with Google Search Grounding...")
+        
+        # 기 발행된 목록을 프롬프트용 텍스트로 가공
+        exclude_text = "\n".join([f"- {t}" for t in published_topics]) if published_topics else "없음"
+        
+        # 7대 정책 락(Lock)을 확실히 걸기 위한 정밀 기획용 프롬프트
+        topic_research_prompt = f"""
+당신은 최고의 실시간 트렌드 분석가이자 과학 저널리스트입니다.
+구글 검색(Google Search) 툴을 활성화하여 현재 인터넷상에서 화제가 되고 있는 최신 실시간 이슈와 과학을 엮은 가장 적합한 포스팅 주제를 **딱 하나** 선정해야 합니다.
+
+[중복 방지 정책]
+아래 목록에 있는 이미 발행된 주제는 절대로 다시 다루면 안 됩니다. 완전히 새로운 소재를 찾으십시오.
+---
+기 발행 목록:
+{exclude_text}
+---
+
+[7대 주제 선정 정책 (Strict Topic Policy)]
+반드시 아래의 7가지 기준을 '동시에 100% 만족'하는 주제만 선정해야 하며, 만족하지 못할 경우 대안을 모색해야 합니다.
+1. [Evergreen + Trend Hybrid]: 지금 매우 핫하게 논의되는 트렌디한 뉴스/현상이면서도, 수개월 후에도 정보 가치와 매력을 지니는 주제.
+2. [검색량 증가율 존재]: 구글 실시간 트렌드 및 대중 검색 흐름상 최근 검색량 그래프가 크게 상승하고 있는 키워드.
+3. [48시간 내 급상승]: 최근 48시간 이내에 새롭게 관찰되었거나 해외/국내 뉴스를 통해 재조명받기 시작한 현상, 이론 또는 이슈.
+4. [과학적 설명 가능]: 현상 이면에 물리(예: 역학, 열역학, 양자), 화학(예: 분자 반응, 신소재), 생물학(예: 유전학, 뇌과학) 등 명확하고 심도 깊은 '일상 속 과학 원리'가 존재할 것.
+5. [이미지화 가능]: 추상적이지 않고, 원리를 3D 그래픽이나 직관적인 모형, 도표(예: 빛의 굴절, 분자 구조, 세포 반응)로 명확히 시각화하여 영어 프롬프트로 묘사할 수 있는 주제.
+6. [일반인 공감 가능]: 대중이 삶의 현장(주방, 야외, 욕실, 스마트폰 사용 중)에서 직접 체감하고 무릎을 탁 칠 만한 흥미롭고 유익한 주제.
+7. [광고 친화적]: Google AdSense 브랜드 안전성(Brand Safety) 기준을 완벽하게 통과할 수 있도록 폭력성, 선정성, 정치적 이슈, 종교 분쟁, 질병 공포, 연예인 가십 등을 완전히 배제할 것.
+
+위 조건들을 바탕으로 완벽히 통과된 오늘의 최적의 과학 블로그 글 기획안을 작성하여 아래의 JSON 구조로만 답변하십시오. JSON 이외의 어떠한 여담이나 텍스트도 포함하지 마십시오.
+
+{{
+  "title": "선정된 매력적인 포스팅 국문 제목 (예: '왜 비누방울은 햇빛 아래서 무지갯빛으로 빛날까?')",
+  "keywords": ["주요", "검색", "태그", "3~5개"],
+  "rationale": "7대 정책을 어떻게 충족했는지 상세한 설명",
+  "image_prompt_1": "본문 전반부에 삽입될, 과학 원리를 묘사하는 고품질 영문 이미지 생성 프롬프트 (Imagen 3 전용, 구체적인 스타일과 광원 묘사 포함)",
+  "image_prompt_2": "본문 후반부나 결론부에 삽입될, 과학 현상의 응용이나 대중적 직관을 돕는 또 다른 고품질 영문 이미지 생성 프롬프트"
+}}
+"""
+        try:
+            # google-genai SDK 에서는 tools 옵션에 google_search를 넣어 Grounding을 구현합니다.
+            response = self.client.models.generate_content(
+                model=self.text_model,
+                contents=topic_research_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    temperature=0.7,
+                    response_mime_type="application/json"
+                )
+            )
+            
+            # JSON 결과 파싱
+            plan = json.loads(response.text)
+            logger.info(f"Selected Topic: '{plan.get('title')}' satisfy all 7 strict policies.")
+            return plan
+            
+        except Exception as e:
+            logger.error(f"Error selecting topic with Gemini: {e}")
+            raise
+
+    def generate_blog_post(self, system_prompt: str, topic_plan: dict) -> str:
+        """
+        선정된 주제를 기반으로 풍부한 지식을 담은 프리미엄 HTML 본문을 작성합니다.
+        중간에 이미지 생성 태그 [IMAGE_PROMPT: 영어 묘사] 2개가 적재적소에 위치하도록 합니다.
+        """
+        title = topic_plan.get("title")
+        img_prompt1 = topic_plan.get("image_prompt_1")
+        img_prompt2 = topic_plan.get("image_prompt_2")
+        
+        logger.info(f"Generating HTML blog post body for topic: '{title}'...")
+        
+        post_prompt = f"""
+당신은 최고의 과학 블로거입니다. 선정된 다음의 기획안을 바탕으로 대중에게 감동을 주는 프리미엄 과학 에세이를 완성하십시오.
+
+[기획안]
+- 제목: {title}
+- 이미지 1 묘사: {img_prompt1}
+- 이미지 2 묘사: {img_prompt2}
+
+[작성 및 서식 요구사항 (Strict Style Policy)]
+1. **HTML 형식 작성**: Blogger 본문에 바로 삽입될 것이므로 마크다운이 아닌 **순수 HTML 태그**로 작성하십시오.
+   - 대제목은 생략(Blogger의 Post Title이 됨)하고, 본문 내 소주제는 `<h2>`, `<h3>` 태그를 활용하십시오.
+   - 단락은 `<p>` 태그로 묶고 문체는 부드러운 경어체('~합니다', '~시죠?')를 사용하십시오.
+   - 과학적 핵심 단어나 문장은 `<strong>` 또는 `<u>` 태그로 강조하여 독자의 시선을 사로잡으십시오.
+   - 전문적인 해설이 들어가는 구역은 `<blockquote>` 태그로 감싸 세련된 프리미엄 블로그 스타일을 구축하십시오.
+   - 핵심 요약이나 비교 데이터가 있다면 `<ul>`, `<li>` 또는 깔끔하게 스타일링된 `<table>`을 활용해 전문성을 극대화하십시오.
+2. **풍부한 지식 전달**: 분량은 깊이 있는 정보가 담길 수 있도록 한글 기준 공백 제외 최소 1,500자 이상으로 매우 상세하고 지적으로 작성하십시오.
+3. **구체적인 이미지 배치**: 본문 중간 흐름상 시각화 자료가 반드시 필요한 위치 2곳에 아래 형식을 **토씨 하나 틀리지 않고 정확하게** 작성해 삽입해야 합니다. (스크립트 파싱용)
+   - 첫 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt1}]`
+   - 두 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt2}]`
+   - 주의: 대괄호와 IMAGE_PROMPT 콜론 뒤 띄어쓰기까지 완벽히 일치해야 합니다.
+
+HTML 포스트 본문만 즉시 반환하십시오. 앞뒤의 ```html 이나 여타 안내 텍스트 없이 오직 HTML 본문 코드만 출력하십시오.
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.text_model,
+                contents=post_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0.75
+                )
+            )
+            
+            content = response.text.strip()
+            # 마크다운 펜스(```html ... ```)가 들어간 경우 정제
+            content = re.sub(r"^```html\s*", "", content, flags=re.IGNORECASE)
+            content = re.sub(r"```$", "", content)
+            
+            # 본문에 IMAGE_PROMPT 가 2개 정상 존재 확인
+            prompt_count = len(re.findall(r"\[IMAGE_PROMPT:\s*[^\]]+\]", content))
+            logger.info(f"Generated post body size: {len(content)} characters. Found {prompt_count} image tags.")
+            
+            if prompt_count != 2:
+                logger.warning(f"Expected exactly 2 [IMAGE_PROMPT: ...] tags, but found {prompt_count}. Repairing or falling back...")
+                
+            return content.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating blog post content: {e}")
+            raise
+
+    def generate_image_by_prompt(self, english_prompt: str) -> bytes:
+        """
+        Imagen 3 API를 호출하여 고해상도 과학 도표/삽화 이미지를 바이너리로 생성해 옵니다.
+        """
+        logger.info(f"Generating image via Imagen 3. Prompt: '{english_prompt[:60]}...'")
+        try:
+            result = self.client.models.generate_images(
+                model=self.image_model,
+                prompt=english_prompt,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    output_mime_type="image/jpeg",
+                    aspect_ratio="16:9"  # 가로형 블로그 이미지 최적 비율
+                )
+            )
+            
+            if not result.generated_images:
+                raise APIError("No images returned from Imagen 3 API.")
+                
+            # 첫 번째 이미지의 바이트 추출
+            image_bytes = result.generated_images[0].image.image_bytes
+            logger.info(f"Successfully generated image. Size: {len(image_bytes)} bytes.")
+            return image_bytes
+            
+        except Exception as e:
+            logger.error(f"Error generating image from Google AI Studio: {e}")
+            raise
