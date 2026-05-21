@@ -14,6 +14,8 @@ logger = logging.getLogger("ScienceBlogBot.Config")
 class Config:
     # Gemini API 설정
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    GEMINI_TOPIC_MODEL = os.getenv("GEMINI_TOPIC_MODEL", "gemini-2.5-flash")
+    GEMINI_POST_MODEL = os.getenv("GEMINI_POST_MODEL", "gemini-3.5-flash")
     
     # Google API 설정
     GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID")

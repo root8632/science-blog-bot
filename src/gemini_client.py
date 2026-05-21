@@ -8,11 +8,12 @@ from google.genai.errors import APIError
 logger = logging.getLogger("ScienceBlogBot.GeminiClient")
 
 class GeminiClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, topic_model: str = "gemini-2.5-flash", post_model: str = "gemini-3.5-flash"):
         # 최신 google-genai SDK 클라이언트 초기화
         self.client = genai.Client(api_key=api_key)
         # 이미지 생성이나 일반 텍스트용 기본 모델 지정
-        self.text_model = "gemini-3.5-flash"  # Grounding 및 텍스트 처리에 적합한 모델
+        self.text_model = topic_model  # Grounding 및 텍스트 처리에 적합한 모델 (주제 선정용)
+        self.post_model = post_model  # 블로그 본문 글작성용 모델
         self.image_model = "imagen-3.0-generate-002"  # 최신 고화질 무료 이미지 모델
 
     def select_topic(self, system_prompt: str, published_topics: list[str]) -> dict:
@@ -139,7 +140,7 @@ HTML 포스트 본문만 즉시 반환하십시오. 앞뒤의 ```html 이나 여
 """
         try:
             response = self.client.models.generate_content(
-                model=self.text_model,
+                model=self.post_model,
                 contents=post_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,

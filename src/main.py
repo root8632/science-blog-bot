@@ -75,7 +75,11 @@ def run_pipeline():
     # 4. Gemini 클라이언트 세팅 및 7대 정책 기반 주제 도출
     logger.info("Initializing Gemini Client...")
     try:
-        gemini_client = GeminiClient(Config.GEMINI_API_KEY)
+        gemini_client = GeminiClient(
+            Config.GEMINI_API_KEY,
+            topic_model=Config.GEMINI_TOPIC_MODEL,
+            post_model=Config.GEMINI_POST_MODEL
+        )
         
         # 주제 도출 단계 (지수 백오프 적용)
         topic_plan = retry_with_backoff(
