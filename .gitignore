@@ -5,3 +5,6 @@
 __pycache__/
 venv/
 .env
+
+# Exclude requirements.txt
+!requirements.txt
