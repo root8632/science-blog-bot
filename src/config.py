@@ -16,6 +16,7 @@ class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     GEMINI_TOPIC_MODEL = os.getenv("GEMINI_TOPIC_MODEL", "gemini-2.5-flash")
     GEMINI_POST_MODEL = os.getenv("GEMINI_POST_MODEL", "gemini-3.5-flash")
+    GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "imagen-3.0-generate-002")
     
     # Google API 설정
     GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID")
