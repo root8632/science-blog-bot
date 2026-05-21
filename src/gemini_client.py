@@ -12,7 +12,7 @@ class GeminiClient:
         # 최신 google-genai SDK 클라이언트 초기화
         self.client = genai.Client(api_key=api_key)
         # 이미지 생성이나 일반 텍스트용 기본 모델 지정
-        self.text_model = "gemini-2.5-flash"  # Grounding 및 텍스트 처리에 적합한 모델
+        self.text_model = "gemini-3.5-flash"  # Grounding 및 텍스트 처리에 적합한 모델
         self.image_model = "imagen-3.0-generate-002"  # 최신 고화질 무료 이미지 모델
 
     def select_topic(self, system_prompt: str, published_topics: list[str]) -> dict:
@@ -25,10 +25,10 @@ class GeminiClient:
         # 기 발행된 목록을 프롬프트용 텍스트로 가공
         exclude_text = "\n".join([f"- {t}" for t in published_topics]) if published_topics else "없음"
         
-        # 7대 정책 락(Lock)을 확실히 걸기 위한 정밀 기획용 프롬프트
-        topic_research_prompt = f"""
+        # 1단계: 구글 검색을 사용해 자유롭게 트렌드 분석 및 기획안 도출
+        research_prompt = f"""
 당신은 최고의 실시간 트렌드 분석가이자 과학 저널리스트입니다.
-구글 검색(Google Search) 툴을 활성화하여 현재 인터넷상에서 화제가 되고 있는 최신 실시간 이슈와 과학을 엮은 가장 적합한 포스팅 주제를 **딱 하나** 선정해야 합니다.
+구글 검색(Google Search) 툴을 활성화하여 현재 인터넷상에서 화제가 되고 있는 최신 실시간 이슈와 과학을 엮은 가장 적합한 포스팅 주제를 **딱 하나** 선정하고 상세 기획안을 작성해 주십시오.
 
 [중복 방지 정책]
 아래 목록에 있는 이미 발행된 주제는 절대로 다시 다루면 안 됩니다. 완전히 새로운 소재를 찾으십시오.
@@ -42,12 +42,39 @@ class GeminiClient:
 1. [Evergreen + Trend Hybrid]: 지금 매우 핫하게 논의되는 트렌디한 뉴스/현상이면서도, 수개월 후에도 정보 가치와 매력을 지니는 주제.
 2. [검색량 증가율 존재]: 구글 실시간 트렌드 및 대중 검색 흐름상 최근 검색량 그래프가 크게 상승하고 있는 키워드.
 3. [48시간 내 급상승]: 최근 48시간 이내에 새롭게 관찰되었거나 해외/국내 뉴스를 통해 재조명받기 시작한 현상, 이론 또는 이슈.
-4. [과학적 설명 가능]: 현상 이면에 물리(예: 역학, 열역학, 양자), 화학(예: 분자 반응, 신소재), 생물학(예: 유전학, 뇌과학) 등 명확하고 심도 깊은 '일상 속 과학 원리'가 존재할 것.
-5. [이미지화 가능]: 추상적이지 않고, 원리를 3D 그래픽이나 직관적인 모형, 도표(예: 빛의 굴절, 분자 구조, 세포 반응)로 명확히 시각화하여 영어 프롬프트로 묘사할 수 있는 주제.
-6. [일반인 공감 가능]: 대중이 삶의 현장(주방, 야외, 욕실, 스마트폰 사용 중)에서 직접 체감하고 무릎을 탁 칠 만한 흥미롭고 유익한 주제.
-7. [광고 친화적]: Google AdSense 브랜드 안전성(Brand Safety) 기준을 완벽하게 통과할 수 있도록 폭력성, 선정성, 정치적 이슈, 종교 분쟁, 질병 공포, 연예인 가십 등을 완전히 배제할 것.
+4. [과학적 설명 가능]: 현상 이면에 물리(역학, 열역학, 양자 등), 화학, 생물학 등 명확하고 심도 깊은 '일상 속 과학 원리'가 존재할 것.
+5. [이미지화 가능]: 원리를 직관적인 모형, 도표(예: 빛의 굴절, 분자 구조, 세포 반응)로 명확히 시각화하여 영어 프롬프트로 묘사할 수 있는 주제.
+6. [일반인 공감 가능]: 대중이 삶의 현장에서 직접 체감하고 흥미를 느낄 만한 주제.
+7. [광고 친화적]: 폭력성, 선정성, 정치/종교 분쟁, 질병 공포 등을 완전히 배제할 것.
 
-위 조건들을 바탕으로 완벽히 통과된 오늘의 최적의 과학 블로그 글 기획안을 작성하여 아래의 JSON 구조로만 답변하십시오. JSON 이외의 어떠한 여담이나 텍스트도 포함하지 마십시오.
+구글 검색 툴을 사용해 최신 자료를 충분히 검색한 뒤, 7대 정책을 어떻게 모두 만족했는지 기술하고, 최종 선정된 '주제 제목', '키워드 태그(3~5개)', '본문에 들어갈 이미지 생성용 영어 묘사 2가지'를 자유롭고 상세하게 텍스트로 기술해 주십시오.
+"""
+        try:
+            # 1단계: 구글 검색을 사용해 자유롭게 트렌드 분석 및 기획안 도출 (response_mime_type을 지정하지 않아 400 에러 우회)
+            logger.info("Step 1: Grounded Research with Google Search...")
+            research_response = self.client.models.generate_content(
+                model=self.text_model,
+                contents=research_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    temperature=0.7
+                )
+            )
+            research_result = research_response.text
+            logger.info("Research complete. Grounded output received.")
+            
+            # 2단계: 도출된 자유 텍스트를 구조화된 JSON 데이터로 완벽하게 변환 (도구 미사용 + response_mime_type="application/json" 사용)
+            logger.info("Step 2: Formatting Grounded Research into JSON...")
+            formatting_prompt = f"""
+당신은 최고의 데이터 파서(Data Parser)입니다.
+아래의 [실시간 과학 트렌드 조사 결과]를 분석하여 지정된 JSON 형식 데이터로 정확하게 구조화해서 출력하십시오.
+
+[실시간 과학 트렌드 조사 결과]
+{research_result}
+
+[요구사항]
+다음 JSON 형식을 엄격히 준수하여 출력하십시오. 어떠한 여담이나 설명도 출력에 포함하지 마십시오.
 
 {{
   "title": "선정된 매력적인 포스팅 국문 제목 (예: '왜 비누방울은 햇빛 아래서 무지갯빛으로 빛날까?')",
@@ -57,21 +84,18 @@ class GeminiClient:
   "image_prompt_2": "본문 후반부나 결론부에 삽입될, 과학 현상의 응용이나 대중적 직관을 돕는 또 다른 고품질 영문 이미지 생성 프롬프트"
 }}
 """
-        try:
-            # google-genai SDK 에서는 tools 옵션에 google_search를 넣어 Grounding을 구현합니다.
-            response = self.client.models.generate_content(
+            json_response = self.client.models.generate_content(
                 model=self.text_model,
-                contents=topic_research_prompt,
+                contents=formatting_prompt,
                 config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    tools=[types.Tool(google_search=types.GoogleSearch())],
-                    temperature=0.7,
+                    system_instruction="You are a strict data formatter that outputs only valid JSON.",
+                    temperature=0.2,
                     response_mime_type="application/json"
                 )
             )
             
             # JSON 결과 파싱
-            plan = json.loads(response.text)
+            plan = json.loads(json_response.text)
             logger.info(f"Selected Topic: '{plan.get('title')}' satisfy all 7 strict policies.")
             return plan
             
