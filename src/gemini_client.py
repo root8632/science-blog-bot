@@ -7,7 +7,23 @@ from google.genai.errors import APIError
 
 logger = logging.getLogger("ScienceBlogBot.GeminiClient")
 
+# 모델별 100만 토큰당 요금 (USD) - 2026년 5월 기준 Google AI Studio Pay-as-you-go
+MODEL_PRICING = {
+    "gemini-2.5-flash":      {"input": 0.30, "output": 2.50},
+    "gemini-2.0-flash":      {"input": 0.10, "output": 0.40},
+    "gemini-1.5-flash":      {"input": 0.075, "output": 0.30},
+    "gemini-3.5-flash":      {"input": 0.50, "output": 3.00},
+    "gemini-3.0-flash":      {"input": 0.50, "output": 3.00},
+}
+
+# 원/달러 환산 근사치
+USD_TO_KRW = 1380
+
+
 class GeminiClient:
+    # 503/429 에러 시 자동 전환할 대체 모델 목록 (우선순위 순서)
+    FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"]
+
     def __init__(self, api_key: str, topic_model: str = "gemini-2.5-flash", post_model: str = "gemini-3.5-flash", image_model: str = "imagen-3.0-generate-002", pixabay_api_key: str = None):
         # 최신 google-genai SDK 클라이언트 초기화
         self.client = genai.Client(api_key=api_key)
@@ -16,6 +32,97 @@ class GeminiClient:
         self.post_model = post_model  # 블로그 본문 글작성용 모델
         self.image_model = image_model  # 최신 고화질 무료 이미지 모델
         self.pixabay_api_key = pixabay_api_key
+        
+        # 누적 토큰 사용량 추적
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_estimated_cost_usd = 0.0
+
+    def _log_token_usage(self, response, model_name: str, step_name: str):
+        """
+        API 응답에서 토큰 사용량 메타데이터를 추출하여 로그에 실시간 출력하고,
+        예상 비용을 원화로 환산하여 누적 추적합니다.
+        """
+        try:
+            usage = response.usage_metadata
+            if not usage:
+                logger.info(f"💡 [{step_name}] Token usage metadata not available for this response.")
+                return
+            
+            input_tokens = getattr(usage, 'prompt_token_count', 0) or 0
+            output_tokens = getattr(usage, 'candidates_token_count', 0) or 0
+            total_tokens = getattr(usage, 'total_token_count', 0) or (input_tokens + output_tokens)
+            
+            # 비용 계산
+            pricing = MODEL_PRICING.get(model_name, {"input": 0.30, "output": 2.50})
+            input_cost = pricing["input"] * (input_tokens / 1_000_000)
+            output_cost = pricing["output"] * (output_tokens / 1_000_000)
+            step_cost_usd = input_cost + output_cost
+            step_cost_krw = step_cost_usd * USD_TO_KRW
+            
+            # 누적 추적
+            self.total_input_tokens += input_tokens
+            self.total_output_tokens += output_tokens
+            self.total_estimated_cost_usd += step_cost_usd
+            
+            logger.info(
+                f"📊 [{step_name}] 토큰 사용량: "
+                f"입력 {input_tokens:,} + 출력 {output_tokens:,} = 총 {total_tokens:,} tokens | "
+                f"예상 비용: ${step_cost_usd:.4f} (약 {step_cost_krw:.1f}원) | "
+                f"모델: {model_name}"
+            )
+        except Exception as e:
+            logger.warning(f"Token usage logging failed (non-critical): {e}")
+
+    def _log_cumulative_usage(self):
+        """파이프라인 전체 누적 토큰 사용량 및 총 비용을 요약 로그로 출력합니다."""
+        total_krw = self.total_estimated_cost_usd * USD_TO_KRW
+        logger.info(
+            f"💰 [누적 합계] 입력 {self.total_input_tokens:,} + 출력 {self.total_output_tokens:,} tokens | "
+            f"총 예상 비용: ${self.total_estimated_cost_usd:.4f} (약 {total_krw:.1f}원)"
+        )
+
+    def _generate_with_fallback(self, primary_model: str, contents, config, step_name: str):
+        """
+        주 모델로 API 호출을 시도하고, 503/429 등 서버 에러 발생 시
+        대체 모델 목록(FALLBACK_MODELS)을 순회하며 자동 전환합니다.
+        성공한 (response, 사용된_모델명) 튜플을 반환합니다.
+        """
+        # 시도할 모델 순서: 주 모델 → 대체 모델들
+        models_to_try = [primary_model] + [m for m in self.FALLBACK_MODELS if m != primary_model]
+        
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                if model_name != primary_model:
+                    logger.warning(f"🔄 [{step_name}] 대체 모델 '{model_name}'(으)로 자동 전환하여 재시도합니다...")
+                
+                response = self.client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=config
+                )
+                
+                if model_name != primary_model:
+                    logger.info(f"✅ [{step_name}] 대체 모델 '{model_name}' 호출 성공!")
+                
+                # 토큰 사용량 로깅
+                self._log_token_usage(response, model_name, step_name)
+                
+                return response, model_name
+                
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                # 503, 429, UNAVAILABLE, RESOURCE_EXHAUSTED 등 서버측 에러만 폴백 대상
+                is_server_error = any(code in error_str for code in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "overloaded"])
+                
+                if is_server_error and model_name != models_to_try[-1]:
+                    logger.warning(f"⚠️ [{step_name}] 모델 '{model_name}' 서버 에러 ({e}). 다음 대체 모델로 전환합니다.")
+                    continue
+                else:
+                    # 서버 에러가 아니거나, 마지막 대체 모델까지 실패한 경우
+                    raise last_error
 
     def select_topic(self, system_prompt: str, published_topics: list[str]) -> dict:
         """
@@ -54,14 +161,15 @@ class GeminiClient:
         try:
             # 1단계: 구글 검색을 사용해 자유롭게 트렌드 분석 및 기획안 도출 (response_mime_type을 지정하지 않아 400 에러 우회)
             logger.info("Step 1: Grounded Research with Google Search...")
-            research_response = self.client.models.generate_content(
-                model=self.text_model,
+            research_response, used_model = self._generate_with_fallback(
+                primary_model=self.text_model,
                 contents=research_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
                     tools=[types.Tool(google_search=types.GoogleSearch())],
                     temperature=0.7
-                )
+                ),
+                step_name="주제 리서치"
             )
             research_result = research_response.text
             logger.info("Research complete. Grounded output received.")
@@ -88,14 +196,15 @@ class GeminiClient:
   "image_caption_2": "본문 후반부 이미지 하단에 노출할 친절하고 세련된 한글 설명 캡션"
 }}
 """
-            json_response = self.client.models.generate_content(
-                model=self.text_model,
+            json_response, used_model_2 = self._generate_with_fallback(
+                primary_model=used_model,  # 1단계에서 성공한 모델을 그대로 사용
                 contents=formatting_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction="You are a strict data formatter that outputs only valid JSON.",
                     temperature=0.2,
                     response_mime_type="application/json"
-                )
+                ),
+                step_name="JSON 구조화"
             )
             
             # JSON 결과 파싱
@@ -194,13 +303,14 @@ class GeminiClient:
 HTML 포스트 본문만 즉시 반환하십시오. 앞뒤의 ```html 이나 여타 안내 텍스트 없이 오직 HTML 본문 코드만 출력하십시오.
 """
         try:
-            response = self.client.models.generate_content(
-                model=self.post_model,
+            response, used_model = self._generate_with_fallback(
+                primary_model=self.post_model,
                 contents=post_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
                     temperature=0.75
-                )
+                ),
+                step_name="블로그 본문 작성"
             )
             
             content = response.text.strip()
@@ -215,6 +325,9 @@ HTML 포스트 본문만 즉시 반환하십시오. 앞뒤의 ```html 이나 여
             if prompt_count != 2:
                 logger.warning(f"Expected exactly 2 [IMAGE_PROMPT: ...] tags, but found {prompt_count}. Repairing or falling back...")
                 
+            # 누적 사용량 요약 출력
+            self._log_cumulative_usage()
+            
             return content.strip()
             
         except Exception as e:

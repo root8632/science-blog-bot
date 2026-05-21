@@ -1,11 +1,11 @@
 name: "Premium Science Blog Auto-Publisher"
 
 on:
-  schedule:
-    # 하루 4회, 6시간 간격 자동 크론 실행 (UTC 00:00, 06:00, 12:00, 18:00)
-    - cron: '0 */6 * * *'
+  # 구글 스프레드시트 Apps Script에서 HTTP API로 원격 호출 (자동 예약 + 수동 즉시 발행)
+  repository_dispatch:
+    types: [publish-blog]
   
-  # 수동 트리거 지원 (테스트 및 즉시 발행용)
+  # 수동 트리거 지원 (GitHub UI에서 직접 실행도 가능)
   workflow_dispatch:
 
 # GITHUB_TOKEN 권한 명시 (이미지 전용 orphan 브랜치에 쓰기 작업을 수행하기 위해 필수)

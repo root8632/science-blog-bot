@@ -92,8 +92,8 @@ def run_pipeline():
             gemini_client.select_topic, 
             system_prompt, 
             published_topics,
-            max_attempts=4,
-            initial_delay=3.0
+            max_attempts=8,
+            initial_delay=5.0
         )
         
         post_title = topic_plan.get("title")
@@ -113,8 +113,8 @@ def run_pipeline():
             system_prompt,
             topic_plan,
             style_guide,
-            max_attempts=4,
-            initial_delay=4.0
+            max_attempts=8,
+            initial_delay=5.0
         )
     except Exception as e:
         logger.error(f"Failed to generate blog content via Gemini: {e}")
