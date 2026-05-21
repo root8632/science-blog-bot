@@ -147,6 +147,7 @@ class GeminiClient:
                     f"⚠️ [STYLE GUIDE VALIDATION FAILED] Google Sheets template is missing mandatory placeholders {missing_tokens}. "
                     f"Falling back to built-in safe default style guide."
                 )
+                self.last_style_guide_source = "Code Fallback (Default)"
                 style_guide = default_style_guide.format(
                     title=title,
                     img_prompt1=img_prompt1,
@@ -162,8 +163,10 @@ class GeminiClient:
                     )
                     logger.info("✅ [STYLE GUIDE VALIDATION SUCCESS] Safely loaded and parsed custom Style Guide from Google Sheets.")
                     logger.info(f"Style Guide Preview: '{style_guide[:150].strip()}...'")
+                    self.last_style_guide_source = "Google Sheets (Custom)"
                 except Exception as e:
                     logger.error(f"❌ Failed to format style guide template: {e}. Falling back to default.")
+                    self.last_style_guide_source = "Code Fallback (Default)"
                     style_guide = default_style_guide.format(
                         title=title,
                         img_prompt1=img_prompt1,
@@ -171,6 +174,7 @@ class GeminiClient:
                     )
         else:
             logger.info("ℹ️ No Style Guide template provided in sheet cells. Using built-in default style guide.")
+            self.last_style_guide_source = "Code Fallback (Default)"
             style_guide = default_style_guide.format(
                 title=title,
                 img_prompt1=img_prompt1,

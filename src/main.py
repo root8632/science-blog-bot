@@ -197,10 +197,13 @@ def run_pipeline():
     logger.info("Logging publication to Google Sheets Database...")
     try:
         current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        style_source = getattr(gemini_client, "last_style_guide_source", "Code Fallback (Default)")
         sheets_client.append_log(
             title=post_title,
             url=published_url,
-            published_at=current_time_str
+            published_at=current_time_str,
+            system_prompt=system_prompt,
+            style_guide_source=style_source
         )
         logger.info("Google Sheets log update complete.")
     except Exception as e:

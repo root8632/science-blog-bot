@@ -68,11 +68,11 @@ class GoogleSheetsClient:
                     # 로그 헤더 추가
                     self.service.spreadsheets().values().update(
                         spreadsheetId=self.spreadsheet_id,
-                        range='로그!A1:C1',
+                        range='로그!A1:E1',
                         valueInputOption='RAW',
                         body={
                             'values': [
-                                ['Title', 'URL', 'Published At']
+                                ['Title', 'URL', 'Published At', 'System Prompt', 'Style Guide Source']
                             ]
                         }
                     ).execute()
@@ -173,20 +173,41 @@ class GoogleSheetsClient:
             logger.error(f"Error fetching published topics: {e}")
             return []
 
-    def append_log(self, title: str, url: str, published_at: str):
+    def append_log(self, title: str, url: str, published_at: str, system_prompt: str = "", style_guide_source: str = ""):
         """새로 발행된 글을 '로그' 시트에 기록하여 중복 방지 DB를 최신화합니다."""
         try:
+            # 기존 헤더를 불러와 검사하여, 필요한 경우 컬럼 확장 (하위 호환 마이그레이션)
+            try:
+                header_res = self.service.spreadsheets().values().get(
+                    spreadsheetId=self.spreadsheet_id,
+                    range='로그!A1:E1'
+                ).execute()
+                headers = header_res.get('values', [[]])[0]
+            except Exception:
+                headers = []
+                
+            if len(headers) < 5:
+                logger.info("Migrating Google Sheets '로그' header for tracking Prompt & Style Guide Source...")
+                self.service.spreadsheets().values().update(
+                    spreadsheetId=self.spreadsheet_id,
+                    range='로그!A1:E1',
+                    valueInputOption='RAW',
+                    body={
+                        'values': [['Title', 'URL', 'Published At', 'System Prompt', 'Style Guide Source']]
+                    }
+                ).execute()
+                
             body = {
-                'values': [[title, url, published_at]]
+                'values': [[title, url, published_at, system_prompt, style_guide_source]]
             }
             self.service.spreadsheets().values().append(
                 spreadsheetId=self.spreadsheet_id,
-                range='로그!A:C',
+                range='로그!A:E',
                 valueInputOption='RAW',
                 insertDataOption='INSERT_ROWS',
                 body=body
             ).execute()
-            logger.info(f"Logged published post in Google Sheet: '{title}'")
+            logger.info(f"Logged published post in Google Sheet: '{title}' with custom configurations info.")
         except HttpError as e:
             logger.error(f"Error logging published post: {e}")
             raise
