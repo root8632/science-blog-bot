@@ -51,6 +51,10 @@ class BloggerClient:
             final_content = final_content.replace(original_tag, premium_image_html)
             logger.info(f"Replaced tag '{original_tag[:30]}...' with premium CDN image card.")
             
+        # 이미지 생성이 실패하여 치환되지 않고 남은 이미지 프롬프트 태그([IMAGE_PROMPT: ...])가 있다면 본문에서 깨끗하게 제거합니다.
+        import re
+        final_content = re.sub(r"\[IMAGE_PROMPT:\s*[^\]]+\]", "", final_content)
+        
         return final_content
 
     def publish_post(self, title: str, html_content: str, keywords: list) -> str:
