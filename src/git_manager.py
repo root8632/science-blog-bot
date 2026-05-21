@@ -155,9 +155,9 @@ class GitManager:
 
     def get_public_cdn_url(self, rel_path: str) -> str:
         """
-        GitHub Pages가 활성화된 경우를 산정하여 정적 퍼블릭 URL을 도출합니다.
-        rel_path format: images/yyyy/mm/{hash}.webp
-        Result format: https://{owner}.github.io/{repo}/{rel_path}
+        GitHub Raw Content URL을 도출합니다.
+        이 주소는 별도의 GitHub Pages 활성화 설정 없이도 푸시된 이미지 자원을 즉시 퍼블릭으로 서빙합니다.
+        Result format: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{rel_path}
         """
         parts = self.github_repo.split("/")
         if len(parts) != 2:
@@ -165,12 +165,8 @@ class GitManager:
         else:
             owner, repo = parts[0], parts[1]
             
-        # GitHub Pages 기본 구조 생성 (소문자 표준 대응)
-        owner_lower = owner.lower()
-        repo_lower = repo.lower()
-        
-        # 포맷 정규화: https://{owner}.github.io/{repo}/{rel_path}
-        cdn_url = f"https://{owner_lower}.github.io/{repo_lower}/{rel_path}"
+        # 포맷 정규화: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{rel_path}
+        cdn_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{self.branch_name}/{rel_path}"
         logger.info(f"Resolved public CDN URL: {cdn_url}")
         return cdn_url
 
