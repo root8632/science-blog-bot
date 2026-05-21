@@ -64,6 +64,10 @@ def run_pipeline():
         system_prompt = sheets_client.get_system_prompt()
         logger.info(f"Loaded custom System Prompt (Length: {len(system_prompt)})")
         
+        # 설정된 커스텀 스타일 가이드 템플릿 로드
+        style_guide = sheets_client.get_style_guide()
+        logger.info(f"Loaded custom Style Guide template (Length: {len(style_guide)})")
+        
         # 기 발행된 중복 방지 타이틀 리스트 확보
         published_topics = sheets_client.get_published_topics()
         logger.info(f"Loaded {len(published_topics)} already published topic(s) to lock duplication.")
@@ -108,6 +112,7 @@ def run_pipeline():
             gemini_client.generate_blog_post,
             system_prompt,
             topic_plan,
+            style_guide,
             max_attempts=4,
             initial_delay=4.0
         )

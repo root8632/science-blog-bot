@@ -107,10 +107,10 @@ class GeminiClient:
             logger.error(f"Error selecting topic with Gemini: {e}")
             raise
 
-    def generate_blog_post(self, system_prompt: str, topic_plan: dict) -> str:
+    def generate_blog_post(self, system_prompt: str, topic_plan: dict, style_guide_template: str = None) -> str:
         """
-        선정된 주제를 기반으로 풍부한 지식을 담은 프리미엄 HTML 본문을 작성합니다.
-        중간에 이미지 생성 태그 [IMAGE_PROMPT: 영어 키워드] 2개가 적재적소에 위치하도록 합니다.
+        선정된 주제와 구글 시트에서 동적으로 가져온 스타일 가이드 템플릿을 바탕으로 본문을 작성합니다.
+        가이드 내의 플레이스홀더({title}, {img_prompt1}, {img_prompt2})가 유효한지 검증하고 적용합니다.
         """
         title = topic_plan.get("title")
         img_prompt1 = topic_plan.get("image_keyword_1") or topic_plan.get("image_prompt_1")
@@ -118,26 +118,72 @@ class GeminiClient:
         
         logger.info(f"Generating HTML blog post body for topic: '{title}'...")
         
+        # 기본 안전 fallback 스타일 가이드
+        default_style_guide = (
+            "[작성 및 서식 요구사항 (Strict Style Policy)]\n"
+            "1. **HTML 형식 작성**: Blogger 본문에 바로 삽입될 것이므로 마크다운이 아닌 **순수 HTML 태그**로 작성하십시오.\n"
+            "   - 대제목은 생략(Blogger의 Post Title이 됨)하고, 본문 내 소주제는 `<h2>`, `<h3>` 태그를 활용하십시오.\n"
+            "   - 단락은 `<p>` 태그로 묶고 문체는 부드러운 경어체('~합니다', '~시죠?')를 사용하십시오.\n"
+            "   - 과학적 핵심 단어나 문장은 `<strong>` 또는 `<u>` 태그로 강조하여 독자의 시선을 사로잡으십시오.\n"
+            "   - 전문적인 해설이 들어가는 구역은 `<blockquote>` 태그로 감싸 세련된 프리미엄 블로그 스타일을 구축하십시오.\n"
+            "   - 핵심 요약이나 비교 데이터가 있다면 `<ul>`, `<li>` 또는 깔끔하게 스타일링된 `<table>`을 활용해 전문성을 극대화하십시오.\n"
+            "2. **풍부한 지식 전달**: 분량은 깊이 있는 정보가 담길 수 있도록 한글 기준 공백 제외 최소 1,500자 이상으로 매우 상세하고 지적으로 작성하십시오.\n"
+            "3. **구체적인 이미지 배치**: 본문 중간 흐름상 시각화 자료가 반드시 필요한 위치 2곳에 아래 형식을 **토씨 하나 틀리지 않고 정확하게** 작성해 삽입해야 합니다. (스크립트 파싱용)\n"
+            "   - 첫 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt1}]`\n"
+            "   - 두 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt2}]`\n"
+            "   - 주의: 대괄호와 IMAGE_PROMPT 콜론 뒤 띄어쓰기까지 완벽히 일치해야 합니다."
+        )
+        
+        # 시트에서 받아온 템플릿 유효성 정밀 검증
+        style_guide = None
+        if style_guide_template:
+            # 필수 3대 토큰 존재 검사
+            required_tokens = ["{title}", "{img_prompt1}", "{img_prompt2}"]
+            missing_tokens = [t for t in required_tokens if t not in style_guide_template]
+            
+            if missing_tokens:
+                logger.warning(
+                    f"⚠️ Google Sheets Style Guide is missing mandatory placeholders {missing_tokens}. "
+                    f"Falling back to built-in safe default style guide to prevent parsing crashes."
+                )
+                style_guide = default_style_guide.format(
+                    title=title,
+                    img_prompt1=img_prompt1,
+                    img_prompt2=img_prompt2
+                )
+            else:
+                try:
+                    # 템플릿 렌더링
+                    style_guide = style_guide_template.format(
+                        title=title,
+                        img_prompt1=img_prompt1,
+                        img_prompt2=img_prompt2
+                    )
+                    logger.info("Successfully formatted Style Guide template loaded from Google Sheets.")
+                except Exception as e:
+                    logger.error(f"Failed to format style guide template: {e}. Falling back to default.")
+                    style_guide = default_style_guide.format(
+                        title=title,
+                        img_prompt1=img_prompt1,
+                        img_prompt2=img_prompt2
+                    )
+        else:
+            logger.info("No Style Guide template provided from sheet. Using default style guide.")
+            style_guide = default_style_guide.format(
+                title=title,
+                img_prompt1=img_prompt1,
+                img_prompt2=img_prompt2
+            )
+            
         post_prompt = f"""
-당신은 최고의 과학 블로거입니다. 선정된 다음의 기획안을 바탕으로 대중에게 감동을 주는 프리미엄 과학 에세이를 완성하십시오.
+당신은 최고의 과학 블로거입니다. 선정된 다음의 기획안과 서식 요구사항을 바탕으로 대중에게 감동을 주는 프리미엄 과학 에세이를 완성하십시오.
 
 [기획안]
 - 제목: {title}
 - 이미지 1 검색 키워드: {img_prompt1}
 - 이미지 2 검색 키워드: {img_prompt2}
 
-[작성 및 서식 요구사항 (Strict Style Policy)]
-1. **HTML 형식 작성**: Blogger 본문에 바로 삽입될 것이므로 마크다운이 아닌 **순수 HTML 태그**로 작성하십시오.
-   - 대제목은 생략(Blogger의 Post Title이 됨)하고, 본문 내 소주제는 `<h2>`, `<h3>` 태그를 활용하십시오.
-   - 단락은 `<p>` 태그로 묶고 문체는 부드러운 경어체('~합니다', '~시죠?')를 사용하십시오.
-   - 과학적 핵심 단어나 문장은 `<strong>` 또는 `<u>` 태그로 강조하여 독자의 시선을 사로잡으십시오.
-   - 전문적인 해설이 들어가는 구역은 `<blockquote>` 태그로 감싸 세련된 프리미엄 블로그 스타일을 구축하십시오.
-   - 핵심 요약이나 비교 데이터가 있다면 `<ul>`, `<li>` 또는 깔끔하게 스타일링된 `<table>`을 활용해 전문성을 극대화하십시오.
-2. **풍부한 지식 전달**: 분량은 깊이 있는 정보가 담길 수 있도록 한글 기준 공백 제외 최소 1,500자 이상으로 매우 상세하고 지적으로 작성하십시오.
-3. **구체적인 이미지 배치**: 본문 중간 흐름상 시각화 자료가 반드시 필요한 위치 2곳에 아래 형식을 **토씨 하나 틀리지 않고 정확하게** 작성해 삽입해야 합니다. (스크립트 파싱용)
-   - 첫 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt1}]`
-   - 두 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt2}]`
-   - 주의: 대괄호와 IMAGE_PROMPT 콜론 뒤 띄어쓰기까지 완벽히 일치해야 합니다.
+{style_guide}
 
 HTML 포스트 본문만 즉시 반환하십시오. 앞뒤의 ```html 이나 여타 안내 텍스트 없이 오직 HTML 본문 코드만 출력하십시오.
 """
