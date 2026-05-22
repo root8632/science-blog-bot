@@ -250,8 +250,8 @@ class GeminiClient:
         # 시트에서 받아온 템플릿 유효성 정밀 검증
         style_guide = None
         if style_guide_template:
-            # 필수 3대 토큰 존재 검사
-            required_tokens = ["{title}", "{img_prompt1}", "{img_prompt2}"]
+            # 필수 토큰 존재 검사 (이미지 처리를 위한 프롬프트 토큰은 필수, {title}은 선택적이므로 검증에서 제외)
+            required_tokens = ["{img_prompt1}", "{img_prompt2}"]
             missing_tokens = [t for t in required_tokens if t not in style_guide_template]
             
             if missing_tokens:
