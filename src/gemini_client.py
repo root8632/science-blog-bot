@@ -199,9 +199,9 @@ class GeminiClient:
   "keywords": ["주요", "검색", "태그", "3~5개"],
   "rationale": "7대 정책을 어떻게 충족했는지 상세한 설명",
   "image_keyword_1": "본문 전반부에 삽입될 이미지 검색을 위한 1~3단어 수준의 명확하고 단순한 영문 키워드 (예: 'lactobacillus', 'bubble')",
-  "image_caption_1": "본문 전반부 이미지 하단에 노출할 친절하고 세련된 한글 설명 캡션 (예: '현미경으로 관찰한 김치 속 유산균의 모습')",
+  "image_caption_1": "본문 전반부 이미지 하단에 노출할 세련된 미니멀 해시태그 캡션 (예: '#유산균 #microscope #세포'와 같이 2~3개 해시태그 결합)",
   "image_keyword_2": "본문 후반부에 삽입될 이미지 검색을 위한 1~3단어 수준의 명확하고 단순한 영문 키워드 (예: 'probiotics', 'microscope')",
-  "image_caption_2": "본문 후반부 이미지 하단에 노출할 친절하고 세련된 한글 설명 캡션"
+  "image_caption_2": "본문 후반부 이미지 하단에 노출할 세련된 미니멀 해시태그 캡션 (예: '#probiotics #유산균 #장건강'과 같이 2~3개 해시태그 결합)"
 }}
 """
             json_response, used_model_2 = self._generate_with_fallback(

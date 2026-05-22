@@ -1,4 +1,5 @@
 import html
+import re
 import logging
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -32,20 +33,35 @@ class BloggerClient:
                 caption = prompt.split(",")[0] if "," in prompt else prompt
                 if len(caption) > 50:
                     caption = caption[:47] + "..."
+            
+            # 해시태그 형식 변환 방어 로직 적용
+            caption = caption.strip()
+            if not caption.startswith("#"):
+                # 문장 내 단어들을 추출하여 해시태그 형태로 가공 (길이 2자 이상인 의미 있는 단어 최대 3개 선별)
+                clean_caption = re.sub(r"[^\w\s]", "", caption)
+                words = [w for w in clean_caption.split() if len(w) >= 2]
+                if words:
+                    # 최대 3개 단어만 해시태그로 결합
+                    caption = " ".join([f"#{w}" for w in words[:3]])
+                else:
+                    # 마땅한 단어가 없으면 프롬프트 앞 단어로 대체
+                    clean_prompt = re.sub(r"[^\w\s]", "", prompt.split(",")[0])
+                    prompt_words = [w for w in clean_prompt.split() if len(w) >= 2]
+                    caption = " ".join([f"#{w}" for w in prompt_words[:2]]) if prompt_words else "#science"
                 
             # HTML 특수기호 에스케이프 처리
             caption_esc = html.escape(caption)
             prompt_esc = html.escape(prompt)
             
-            # 프리미엄 블로그 스타일의 이미지 카드 블록 빌드
-            # 반응형 크기 설정, 둥근 모서리(border-radius: 12px), 은은한 쉐도우(box-shadow), 이탤릭체 캡션
+            # 프리미엄 블로그 스타일의 이미지 카드 블록 빌드 (해시태그 전용 모던 미니멀 스타일)
+            # 반응형 크기 설정, 둥근 모서리(border-radius: 12px), 은은한 쉐도우(box-shadow), 미니멀 해시태그
             premium_image_html = f"""
 <div class="science-blog-image-card" style="text-align: center; margin: 35px 0; padding: 10px; background-color: #fafafa; border-radius: 16px; border: 1px solid #eaeaea;">
     <a href="{cdn_url}" target="_blank" style="text-decoration: none;">
         <img src="{cdn_url}" alt="{prompt_esc}" style="max-width: 100%; height: auto; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); transition: transform 0.3s ease-in-out;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'" />
     </a>
-    <p style="color: #666; font-size: 0.88em; margin: 12px 0 4px 0; font-family: 'Inter', 'Noto Sans KR', sans-serif; font-style: italic; line-height: 1.4;">
-        💡 {caption_esc}
+    <p style="color: #888; font-size: 0.82em; margin: 12px 0 4px 0; font-family: 'Inter', 'Noto Sans KR', sans-serif; font-weight: 500; letter-spacing: 0.5px; line-height: 1.4;">
+        {caption_esc}
     </p>
 </div>
 """
