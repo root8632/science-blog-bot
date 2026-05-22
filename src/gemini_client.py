@@ -14,6 +14,8 @@ MODEL_PRICING = {
     "gemini-1.5-flash":      {"input": 0.075, "output": 0.30},
     "gemini-3.5-flash":      {"input": 0.50, "output": 3.00},
     "gemini-3.0-flash":      {"input": 0.50, "output": 3.00},
+    "gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40},
+    "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.50},
 }
 
 # 원/달러 환산 근사치
@@ -22,7 +24,8 @@ USD_TO_KRW = 1380
 
 class GeminiClient:
     # 503/429 에러 시 자동 전환할 대체 모델 목록 (우선순위 순서)
-    FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    # 2026년 기준 1.5-flash는 단종(404), 2.0-flash는 무료 티어 제한(429)이 있으므로 최신 Lite 모델로 대체
+    FALLBACK_MODELS = ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]
 
     def __init__(self, api_key: str, topic_model: str = "gemini-2.5-flash", post_model: str = "gemini-3.5-flash", image_model: str = "imagen-3.0-generate-002", pixabay_api_key: str = None):
         # 최신 google-genai SDK 클라이언트 초기화
