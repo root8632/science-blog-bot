@@ -3,7 +3,7 @@ import sys
 import time
 import random
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from config import Config
 from google_sheets import GoogleSheetsClient
@@ -196,14 +196,23 @@ def run_pipeline():
     # 9. Google Sheets 로그기록에 적재하여 DB 업데이트
     logger.info("Logging publication to Google Sheets Database...")
     try:
-        current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # GitHub Actions(기본 UTC) 환경 대응을 위해 한국 시간대(KST, UTC+9) 적용
+        kst = timezone(timedelta(hours=9))
+        current_time_str = datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
         style_source = getattr(gemini_client, "last_style_guide_source", "Code Fallback (Default)")
+        
+        # 실제로 동작에 쓰인 최종 모델 추출
+        topic_model_used = getattr(gemini_client, "last_topic_model", "Unknown")
+        post_model_used = getattr(gemini_client, "last_post_model", "Unknown")
+        
         sheets_client.append_log(
             title=post_title,
             url=published_url,
             published_at=current_time_str,
             system_prompt=system_prompt,
-            style_guide_source=style_source
+            style_guide_source=style_source,
+            topic_model=topic_model_used,
+            post_model=post_model_used
         )
         logger.info("Google Sheets log update complete.")
     except Exception as e:

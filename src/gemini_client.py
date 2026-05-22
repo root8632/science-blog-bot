@@ -214,6 +214,7 @@ class GeminiClient:
             
             # JSON 결과 파싱
             plan = json.loads(json_response.text)
+            self.last_topic_model = used_model_2
             logger.info(f"Selected Topic: '{plan.get('title')}' satisfy all 7 strict policies.")
             return plan
             
@@ -330,6 +331,7 @@ HTML 포스트 본문만 즉시 반환하십시오. 앞뒤의 ```html 이나 여
             if prompt_count != 2:
                 logger.warning(f"Expected exactly 2 [IMAGE_PROMPT: ...] tags, but found {prompt_count}. Repairing or falling back...")
                 
+            self.last_post_model = used_model
             # 누적 사용량 요약 출력
             self._log_cumulative_usage()
             

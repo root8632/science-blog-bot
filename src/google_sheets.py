@@ -65,14 +65,14 @@ class GoogleSheetsClient:
                     ).execute()
                     
                 if '로그' not in existing_sheets:
-                    # 로그 헤더 추가
+                    # 로그 헤더 추가 (주제 선정 모델 및 본문 작성 모델 추적 포함)
                     self.service.spreadsheets().values().update(
                         spreadsheetId=self.spreadsheet_id,
-                        range='로그!A1:E1',
+                        range='로그!A1:G1',
                         valueInputOption='RAW',
                         body={
                             'values': [
-                                ['Title', 'URL', 'Published At', 'System Prompt', 'Style Guide Source']
+                                ['Title', 'URL', 'Published At', 'System Prompt', 'Style Guide Source', 'Topic Model', 'Post Model']
                             ]
                         }
                     ).execute()
@@ -173,36 +173,36 @@ class GoogleSheetsClient:
             logger.error(f"Error fetching published topics: {e}")
             return []
 
-    def append_log(self, title: str, url: str, published_at: str, system_prompt: str = "", style_guide_source: str = ""):
+    def append_log(self, title: str, url: str, published_at: str, system_prompt: str = "", style_guide_source: str = "", topic_model: str = "", post_model: str = ""):
         """새로 발행된 글을 '로그' 시트에 기록하여 중복 방지 DB를 최신화합니다."""
         try:
             # 기존 헤더를 불러와 검사하여, 필요한 경우 컬럼 확장 (하위 호환 마이그레이션)
             try:
                 header_res = self.service.spreadsheets().values().get(
                     spreadsheetId=self.spreadsheet_id,
-                    range='로그!A1:E1'
+                    range='로그!A1:G1'
                 ).execute()
                 headers = header_res.get('values', [[]])[0]
             except Exception:
                 headers = []
                 
-            if len(headers) < 5:
-                logger.info("Migrating Google Sheets '로그' header for tracking Prompt & Style Guide Source...")
+            if len(headers) < 7:
+                logger.info("Migrating Google Sheets '로그' header for tracking Models, Prompt & Style Guide...")
                 self.service.spreadsheets().values().update(
                     spreadsheetId=self.spreadsheet_id,
-                    range='로그!A1:E1',
+                    range='로그!A1:G1',
                     valueInputOption='RAW',
                     body={
-                        'values': [['Title', 'URL', 'Published At', 'System Prompt', 'Style Guide Source']]
+                        'values': [['Title', 'URL', 'Published At', 'System Prompt', 'Style Guide Source', 'Topic Model', 'Post Model']]
                     }
                 ).execute()
                 
             body = {
-                'values': [[title, url, published_at, system_prompt, style_guide_source]]
+                'values': [[title, url, published_at, system_prompt, style_guide_source, topic_model, post_model]]
             }
             self.service.spreadsheets().values().append(
                 spreadsheetId=self.spreadsheet_id,
-                range='로그!A:E',
+                range='로그!A:G',
                 valueInputOption='RAW',
                 insertDataOption='INSERT_ROWS',
                 body=body
