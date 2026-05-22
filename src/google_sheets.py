@@ -8,6 +8,8 @@ class GoogleSheetsClient:
     def __init__(self, credentials, spreadsheet_id):
         self.service = build('sheets', 'v4', credentials=credentials)
         self.spreadsheet_id = spreadsheet_id
+        self.last_system_prompt_source = "Local"
+        self.last_style_guide_source = "Local"
         self._ensure_sheets_exist()
 
     def _ensure_sheets_exist(self):
@@ -121,17 +123,21 @@ class GoogleSheetsClient:
             rows = result.get('values', [])
             if not rows:
                 logger.warning("Settings sheet is empty. Using default system prompt.")
+                self.last_system_prompt_source = "Local"
                 return self._get_default_prompt()
                 
             for row in rows:
                 if len(row) >= 2 and row[0].strip() == 'System Prompt':
+                    self.last_system_prompt_source = "GoogleSheet"
                     return row[1].strip()
                     
             logger.warning("'System Prompt' key not found in settings sheet. Using default.")
+            self.last_system_prompt_source = "Local"
             return self._get_default_prompt()
             
         except HttpError as e:
             logger.error(f"Error fetching system prompt from Google Sheet: {e}")
+            self.last_system_prompt_source = "Local"
             return self._get_default_prompt()
 
     def get_style_guide(self) -> str:
@@ -145,17 +151,21 @@ class GoogleSheetsClient:
             rows = result.get('values', [])
             if not rows:
                 logger.warning("Settings sheet is empty. Using default style guide.")
+                self.last_style_guide_source = "Local"
                 return self._get_default_style_guide()
                 
             for row in rows:
                 if len(row) >= 2 and row[0].strip() == 'Style Guide':
+                    self.last_style_guide_source = "GoogleSheet"
                     return row[1].strip()
                     
             logger.warning("'Style Guide' key not found in settings sheet. Using default.")
+            self.last_style_guide_source = "Local"
             return self._get_default_style_guide()
             
         except HttpError as e:
             logger.error(f"Error fetching style guide from Google Sheet: {e}")
+            self.last_style_guide_source = "Local"
             return self._get_default_style_guide()
 
     def get_published_topics(self) -> list[str]:

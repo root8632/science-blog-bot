@@ -199,7 +199,9 @@ def run_pipeline():
         # GitHub Actions(기본 UTC) 환경 대응을 위해 한국 시간대(KST, UTC+9) 적용
         kst = timezone(timedelta(hours=9))
         current_time_str = datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
-        style_source = getattr(gemini_client, "last_style_guide_source", "Code Fallback (Default)")
+        
+        system_prompt_source = getattr(sheets_client, "last_system_prompt_source", "Local")
+        style_source = getattr(gemini_client, "last_style_guide_source", "Local")
         
         # 실제로 동작에 쓰인 최종 모델 추출
         topic_model_used = getattr(gemini_client, "last_topic_model", "Unknown")
@@ -209,7 +211,7 @@ def run_pipeline():
             title=post_title,
             url=published_url,
             published_at=current_time_str,
-            system_prompt=system_prompt,
+            system_prompt=system_prompt_source,
             style_guide_source=style_source,
             topic_model=topic_model_used,
             post_model=post_model_used
