@@ -60,7 +60,7 @@ class GoogleSheetsClient:
                         body={
                             'values': [
                                 ['Key', 'Value'],
-                                ['System Prompt', '당신은 대중을 사로잡는 프리미엄 과학 에디터이자 전문 블로거입니다. 일상 속에 숨겨진 과학적 사실을 깊이 있으면서도 흥미진진하게 풀어내며, 가독성이 높고 풍부한 HTML 포맷의 지식을 전달합니다.'],
+                                ['System Prompt', self._get_default_prompt()],
                                 ['Style Guide', self._get_default_style_guide()]
                             ]
                         }
@@ -79,7 +79,7 @@ class GoogleSheetsClient:
                         }
                     ).execute()
             
-            # 기존 '설정' 시트가 존재하는데 'Style Guide' 키만 누락된 경우를 위한 자동 보완 로직
+            # 기존 '설정' 시트 마이그레이션 및 자동 보완 로직
             if '설정' in existing_sheets:
                 try:
                     res = self.service.spreadsheets().values().get(
@@ -89,14 +89,36 @@ class GoogleSheetsClient:
                     rows = res.get('values', [])
                 except Exception:
                     rows = []
-
+                
                 has_style_guide = False
-                for r in rows:
-                    if r and r[0].strip() == 'Style Guide':
-                        has_style_guide = True
-                        break
-                        
-                if not has_style_guide:
+                needs_tech_migration = False
+                
+                for idx, r in enumerate(rows):
+                    if r:
+                        key = r[0].strip()
+                        if key == 'Style Guide':
+                            has_style_guide = True
+                        elif key == 'System Prompt':
+                            # 기존 과학 블로거 텍스트가 감지될 경우 마이그레이션 대상 지정
+                            if len(r) >= 2 and ("과학 에디터" in r[1] or "과학적 사실" in r[1] or "물리학" in r[1]):
+                                needs_tech_migration = True
+                
+                if needs_tech_migration:
+                    logger.info("Detected legacy Science Blog settings. Migrating settings to IT/Programming Tech Blogger format...")
+                    self.service.spreadsheets().values().update(
+                        spreadsheetId=self.spreadsheet_id,
+                        range='설정!A2:B3',
+                        valueInputOption='RAW',
+                        body={
+                            'values': [
+                                ['System Prompt', self._get_default_prompt()],
+                                ['Style Guide', self._get_default_style_guide()]
+                            ]
+                        }
+                    ).execute()
+                    logger.info("Successfully migrated 'System Prompt' and 'Style Guide' to IT Tech Blogger format.")
+                    
+                elif not has_style_guide:
                     next_row = len(rows) + 1
                     self.service.spreadsheets().values().update(
                         spreadsheetId=self.spreadsheet_id,
@@ -223,27 +245,35 @@ class GoogleSheetsClient:
             raise
 
     def _get_default_prompt(self) -> str:
-        """시트 통신 실패 시 백업용으로 사용할 기본 프리미엄 과학 블로거 시스템 프롬프트입니다."""
+        """시트 통신 실패 시 백업용으로 사용할 기본 프리미엄 프로그래밍 테크 에디터 시스템 프롬프트입니다."""
         return (
-            "당신은 전 세계의 흥미롭고 신비로운 일상 현상을 예리하게 분석하는 최고의 과학 블로거입니다.\n"
-            "물리학, 화학, 생물학 등의 기초 과학부터 현대 첨단 공학 기술까지, 복잡한 개념을 일반 대중이\n"
-            "직관적으로 이해하고 탄성을 자아낼 수 있도록 스토리가 풍부하고 논리 정연한 HTML 블로그 글을 작성합니다.\n"
-            "모든 본문에는 유익한 정보와 신뢰성 높은 출처, 과학적 수식이 조화롭게 어우러져야 합니다."
+            "당신은 대중의 마음을 사로잡는 프리미엄 소프트웨어 엔지니어이자 전문 테크 에디터입니다. "
+            "어렵고 복잡하게 느껴지는 개발 지식, 업무 자동화, 데이터 크롤링, 실무 코딩 스킬 등을 초보자도 쉽게 따라 할 수 있도록 "
+            "원리부터 코드 한 줄까지 친절하고 흥미진진하게 풀어내는 역할을 수행합니다.\n\n"
+            "모든 텍스트는 신뢰성 높으면서도 상냥하고 부드러운 경어체('~합니다', '~시죠?')로 작성해 주십시오. "
+            "글을 작성할 때 단순히 코드만 나열하는 지루한 튜토리얼 방식을 배제하고, 반드시 '이 기술을 통해 우리가 일상이나 실무에서 "
+            "겪는 비효율을 어떻게 획기적으로 개선할 수 있는지' 당사자 시점의 구체적인 상황극이나 가상 예시(예: '매일 아침 수동으로 1시간씩 "
+            "걸리던 엑셀 복사-붙여넣기 업무를 단 15줄의 파이썬 코드로 해결한 순간...')를 한 단락 이상 구체적으로 포함하십시오. "
+            "이를 통해 독자가 왜 이 코드를 배워야 하는지 강렬한 오리지널리티와 공감을 이끌어내야 합니다.\n\n"
+            "모든 한글 텍스트는 표준 한글 유니코드 범위 내에서만 작성되어야 합니다. "
+            "시각적으로 유사한 일본어 가타카나(예: 로, 카, 토, 에, 하 등의 유사 글자 오타)를 한글 단어 내에 혼용하는 오류를 절대 범하지 마십시오."
         )
 
     def _get_default_style_guide(self) -> str:
-        """시트 통신 실패 시 백업용 및 최초 초기화용으로 사용할 기본 물리적 서식 요구사항 가이드입니다."""
+        """시트 통신 실패 시 백업용 및 최초 초기화용으로 사용할 기본 테크 서식 요구사항 가이드입니다."""
         return (
-            "[작성 및 서식 요구사항 (Strict Style Policy)]\n"
-            "1. **HTML 형식 작성**: Blogger 본문에 바로 삽입될 것이므로 마크다운이 아닌 **순수 HTML 태그**로 작성하십시오.\n"
+            "[작성 및 서식 요구사항 (Strict Tech-Style Policy)]\n\n"
+            "1. **HTML 형식 작성**: Blogger 본문에 바로 깔끔하게 삽입되도록 마크다운이 아닌 **순수 HTML 태그**로 작성하십시오.\n"
             "   - 대제목은 생략(Blogger의 Post Title이 됨)하고, 본문 내 소주제는 `<h2>`, `<h3>` 태그를 활용하십시오.\n"
-            "   - 단락은 `<p>` 태그로 묶고 문체는 부드러운 경어체('~합니다', '~시죠?')를 사용하십시오.\n"
-            "   - 과학적 핵심 단어나 문장은 `<strong>` 또는 `<u>` 태그로 강조하여 독자의 시선을 사로잡으십시오.\n"
-            "   - 전문적인 해설이 들어가는 구역은 `<blockquote>` 태그로 감싸 세련된 프리미엄 블로그 스타일을 구축하십시오.\n"
-            "   - 핵심 요약이나 비교 데이터가 있다면 `<ul>`, `<li>` 또는 깔끔하게 스타일링된 `<table>`을 활용해 전문성을 극대화하십시오.\n"
-            "2. **풍부한 지식 전달**: 분량은 깊이 있는 정보가 담길 수 있도록 한글 기준 공백 제외 최소 1,500자 이상으로 매우 상세하고 지적으로 작성하십시오.\n"
-            "3. **구체적인 이미지 배치**: 본문 중간 흐름상 시각화 자료가 반드시 필요한 위치 2곳에 아래 형식을 **토씨 하나 틀리지 않고 정확하게** 작성해 삽입해야 합니다. (스크립트 파싱용)\n"
-            "   - 첫 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt1}]`\n"
-            "   - 두 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt2}]`\n"
-            "   - 주의: 대괄호와 IMAGE_PROMPT 콜론 뒤 띄어쓰기까지 완벽히 일치해야 합니다."
+            "   - 핵심적인 개발 팁이나 주의해야 할 에러 로그 분석, 핵심 요약은 `<blockquote>` 태그로 감싸 세련된 프리미엄 블로그 스타일을 구축하십시오.\n"
+            "   - 과학적/기술적 강조 단어는 `<strong>` 또는 `<u>` 태그로 강조하여 독자의 시선을 사로잡으십시오.\n\n"
+            "2. **실무 코드 예제(Code Snippet) 포함**:\n"
+            "   - 본문 중간 흐름상 가장 필요한 위치에 **실제 동작이 가능한 완성형 코딩 예제**를 1회 이상 반드시 포함하십시오.\n"
+            "   - 코드 블록은 반드시 `<pre><code class='language-python'>` (또는 해당 코딩 언어 태그) 구조를 활용해 감싸주십시오.\n"
+            "   - 소스코드 내부에는 초보자도 코드를 완독할 수 있도록 친절한 한글 주석(예: `# 1단계: 웹페이지 HTML 가져오기`)을 각 기능별로 꼼꼼하게 한 줄씩 필수로 달아주어야 합니다.\n\n"
+            "3. **미니멀 해시태그 시작 자료 배치**:\n"
+            "   - 본문 중간 흐름상 기술 묘사를 위한 시각 자료가 필요한 위치 2곳에 아래 형식을 **토씨 하나 틀리지 않고 정확하게** 작성해 삽입해야 합니다.\n"
+            "     - 첫 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt1}]`\n"
+            "     - 두 번째 시각 자료 위치: `[IMAGE_PROMPT: {img_prompt2}]`\n"
+            "   - 이미지 하단 캡션 문구는 긴 문장 형태의 서술을 완전히 배제하고, 독자에게 세련된 트렌디함을 선사하도록 2~3개의 간결한 **해시태그 형식**으로만 생성하십시오. (예: `#python #web_scraping #beautifulsoup`)"
         )
