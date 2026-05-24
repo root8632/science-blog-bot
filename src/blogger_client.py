@@ -70,8 +70,43 @@ class BloggerClient:
             logger.info(f"Replaced tag '{original_tag[:30]}...' with premium CDN image card.")
             
         # 이미지 생성이 실패하여 치환되지 않고 남은 이미지 프롬프트 태그([IMAGE_PROMPT: ...])가 있다면 본문에서 깨끗하게 제거합니다.
-        import re
         final_content = re.sub(r"\[IMAGE_PROMPT:\s*[^\]]+\]", "", final_content)
+        
+        # ── 코드 블록 다크 테마 스타일링 후처리 ──
+        # AI가 생성한 <pre><code class="language-xxx"> 블록을 모던한 다크 테마 코드 창으로 치환합니다.
+        # Blogger에는 Prism.js 같은 외부 라이브러리가 없으므로 inline CSS만으로 구현합니다.
+        def _style_code_block(match):
+            full_match = match.group(0)
+            # 언어 클래스 추출 (language-python, language-javascript 등)
+            lang_match = re.search(r"class=['\"]language-(\w+)['\"]", full_match)
+            lang = lang_match.group(1).upper() if lang_match else "CODE"
+            
+            # <code> 태그 안의 실제 코드 내용만 추출
+            code_match = re.search(r"<code[^>]*>(.*?)</code>", full_match, re.DOTALL)
+            code_content = code_match.group(1) if code_match else ""
+            
+            return (
+                f'<div style="position:relative; margin:28px 0; border-radius:12px; overflow:hidden; '
+                f'box-shadow:0 4px 20px rgba(0,0,0,0.15);">'
+                f'<div style="background:#2d2d2d; padding:8px 16px; display:flex; align-items:center; gap:8px;">'
+                f'<span style="width:12px;height:12px;border-radius:50%;background:#ff5f57;display:inline-block;"></span>'
+                f'<span style="width:12px;height:12px;border-radius:50%;background:#ffbd2e;display:inline-block;"></span>'
+                f'<span style="width:12px;height:12px;border-radius:50%;background:#28c940;display:inline-block;"></span>'
+                f'<span style="margin-left:auto;color:#999;font-size:0.75em;font-family:monospace;letter-spacing:1px;">{lang}</span>'
+                f'</div>'
+                f'<pre style="background:#1e1e1e; color:#d4d4d4; padding:20px 24px; margin:0; '
+                f'overflow-x:auto; font-family:\'Consolas\',\'Courier New\',monospace; font-size:0.9em; '
+                f'line-height:1.65; tab-size:4; border:none;">'
+                f'<code style="background:none; color:inherit; padding:0; font-family:inherit;">'
+                f'{code_content}</code></pre></div>'
+            )
+        
+        final_content = re.sub(
+            r"<pre[^>]*>\s*<code[^>]*>.*?</code>\s*</pre>",
+            _style_code_block,
+            final_content,
+            flags=re.DOTALL
+        )
         
         return final_content
 
