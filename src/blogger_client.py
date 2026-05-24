@@ -108,6 +108,52 @@ class BloggerClient:
             flags=re.DOTALL
         )
         
+        # ── 요약/주의/팁 박스(blockquote) 동적 테마 스타일링 후처리 ──
+        def _style_blockquote(match):
+            full_match = match.group(0)
+            
+            # blockquote 내부 콘텐츠 추출
+            inner_match = re.search(r"<blockquote[^>]*>(.*?)</blockquote>", full_match, re.DOTALL)
+            inner_html = inner_match.group(1).strip() if inner_match else ""
+            
+            # 분석을 위한 텍스트 소문자화(영어 대비) 및 한글 체크
+            lower_html = inner_html.lower()
+            
+            # 콘텐츠 내용에 따른 테마(포인트 컬러, 배경색, 아이콘) 자동 분기
+            if any(w in lower_html for w in ["주의", "경고", "에러", "warning", "caution", "danger", "error"]):
+                # 오렌지/레드 계열 (Warning)
+                bg_color = "#fffbf7"
+                border_color = "#ff9800"
+                icon = "⚠️"
+            elif any(w in lower_html for w in ["팁", "참고", "reference", "note", "tip"]):
+                # 딥블루/테일 계열 (Tip/Info)
+                bg_color = "#f4f9fc"
+                border_color = "#2196f3"
+                icon = "💡"
+            else:
+                # 그레이/모노톤 계열 (General Summary/Note)
+                bg_color = "#f8f9fa"
+                border_color = "#607d8b"
+                icon = "📝"
+                
+            return (
+                f'<blockquote style="margin:24px 0; padding:18px 24px; background-color:{bg_color}; '
+                f'border-left:5px solid {border_color}; border-radius:0 8px 8px 0; '
+                f'box-shadow:0 4px 12px rgba(0,0,0,0.02); color:#2c3e50; '
+                f'font-family:\'Inter\', \'Noto Sans KR\', sans-serif; font-size:0.95em; line-height:1.7; '
+                f'display:flex; align-items:flex-start; gap:14px; border-top:none; border-right:none; border-bottom:none;">'
+                f'<span style="font-size:1.3em; line-height:1; margin-top:2px; user-select:none;">{icon}</span>'
+                f'<div style="flex:1; margin:0; padding:0;">{inner_html}</div>'
+                f'</blockquote>'
+            )
+            
+        final_content = re.sub(
+            r"<blockquote[^>]*>.*?</blockquote>",
+            _style_blockquote,
+            final_content,
+            flags=re.DOTALL
+        )
+        
         return final_content
 
     def publish_post(self, title: str, html_content: str, keywords: list) -> str:
